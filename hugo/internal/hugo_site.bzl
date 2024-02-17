@@ -1,3 +1,5 @@
+load("@aspect_bazel_lib//lib:copy_file.bzl", "copy_file_action", "COPY_FILE_TOOLCHAINS")
+
 def relative_path(src, dirname):
     """Given a src File and a directory it's under, return the relative path.
 
@@ -27,12 +29,7 @@ def copy_to_dir(ctx, srcs, dirname):
     for i in srcs:
         if i.is_source:
             o = ctx.actions.declare_file(relative_path(i, dirname))
-            ctx.actions.run(
-                inputs = [i],
-                executable = "cp",
-                arguments = ["-r", "-L", i.path, o.path],
-                outputs = [o],
-            )
+            copy_file_action(ctx, src = i, dst = o)
             outs.append(o)
         else:
             outs.append(i)
@@ -53,16 +50,8 @@ def _hugo_site_impl(ctx):
 
     if config_dir == None or len(config_dir) == 0:
         config_file = ctx.actions.declare_file(ctx.file.config.basename)
-        
-        ctx.actions.run_shell(
-            inputs = [ctx.file.config],
-            outputs = [config_file],
-            command = 'cp -L "$1" "$2"',
-            arguments = [ctx.file.config.path, config_file.path],
-        )
-
+        copy_file_action(ctx, src = ctx.file.config, dst = config_file)
         hugo_inputs.append(config_file)
-
         hugo_args += [
             "--source",
             config_file.dirname,
@@ -104,12 +93,7 @@ def _hugo_site_impl(ctx):
             else:
                 o_filename = "/".join(["themes", theme.name, i.short_path[len(theme.path):]])
             o = ctx.actions.declare_file(o_filename)
-            ctx.actions.run_shell(
-                inputs = [i],
-                outputs = [o],
-                command = 'cp -r -L "$1" "$2"',
-                arguments = [i.path, o.path],
-            )
+            copy_file_action(ctx, src = i, dst = o)
             hugo_inputs.append(o)
 
     # Prepare hugo command
@@ -137,7 +121,7 @@ def _hugo_site_impl(ctx):
         tools = [hugo],
         execution_requirements = {
             "no-sandbox": "1",
-        }, 
+        },
     )
 
     files = depset([hugo_outputdir])
@@ -195,7 +179,7 @@ hugo_site = rule(
         # Files to be included in the i18n/ subdir
         "i18n": attr.label_list(
             allow_files = True,
-        ),        
+        ),
         # The hugo executable
         "hugo": attr.label(
             default = "@hugo//:hugo",
@@ -222,6 +206,8 @@ hugo_site = rule(
         ),
     },
     implementation = _hugo_site_impl,
+    toolchains = COPY_FILE_TOOLCHAINS,
+
 )
 
 _SERVE_SCRIPT_PREFIX = """#!/bin/bash
